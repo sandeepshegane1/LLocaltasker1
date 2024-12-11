@@ -7,7 +7,8 @@ import { ServiceProviders } from '../components/dashboard/ServiceProviders';
 import { WorkersByCategory } from '../components/dashboard/WorkersByCategory';
 import { ProviderDashboard } from '../components/dashboard/ProviderDashboard';
 import { DashboardNav } from '../components/dashboard/DashboardNav';
-
+import { Farmers } from '../components/dashboard/Farmers';
+import { FarmersActivity} from '../components/dashboard/FarmersActivity'
 export function Dashboard() {
   const user = useAuthStore((state) => state.user);
 
@@ -32,6 +33,8 @@ export function Dashboard() {
             <Route path="/services/:category/providers" element={<ServiceProviders />} />
             <Route path="/workers" element={<Workers />} />
             <Route path="/workers/:category" element={<WorkersByCategory />} />
+            <Route path="/farmers" element={<Farmers />} />
+            <Route path="/farmers/:category" element={<FarmersActivity />} />
           </Routes>
         ) : (
           <Routes>

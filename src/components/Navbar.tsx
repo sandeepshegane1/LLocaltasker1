@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { UserCircle } from 'lucide-react';
 import { useAuthStore } from '../store/authStore';
 
 export function Navbar() {
@@ -29,6 +30,13 @@ export function Navbar() {
                   className="text-gray-700 hover:text-emerald-600 px-3 py-2 rounded-md text-sm font-medium"
                 >
                   Dashboard
+                </Link>
+                <Link
+                  to="/profile"
+                  className="text-gray-700 hover:text-emerald-600 px-3 py-2 rounded-md text-sm font-medium flex items-center"
+                >
+                  <UserCircle className="w-5 h-5 mr-1" />
+                  Profile
                 </Link>
                 <button
                   onClick={handleLogout}

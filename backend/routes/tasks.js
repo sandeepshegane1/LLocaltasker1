@@ -123,4 +123,104 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
+// In your taskRoutes.js or equivalent file
+
+router.get('/user-tasks', auth, async (req, res) => {
+  try {
+    const tasks = await Task.find({
+      client: req.user._id,
+      $or: [
+        { status: { $ne: 'CANCELLED' } },
+        { status: 'CANCELLED', rejectedByProvider: true }
+      ]
+    }).sort({ createdAt: -1 });
+    res.json(tasks);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Reject a task (for service providers)
+router.post('/reject-task/:taskId', auth, async (req, res) => {
+  try {
+    const task = await Task.findOne({ _id: req.params.taskId, provider: req.user._id });
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found or you are not the assigned provider' });
+    }
+    
+    task.status = 'CANCELLED';
+    task.rejectedByProvider = true;
+    await task.save();
+    
+    res.json({ message: 'Task rejected successfully', task });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create a new task
+router.post('/tasks', auth, async (req, res) => {
+  try {
+    const task = new Task({
+      ...req.body,
+      client: req.user._id
+    });
+    await task.save();
+    res.status(201).json(task);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Get all tasks (you might want to add pagination here)
+router.get('/tasks', auth, async (req, res) => {
+  try {
+    const tasks = await Task.find({});
+    res.json(tasks);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update a task
+router.patch('/tasks/:id', auth, async (req, res) => {
+  const updates = Object.keys(req.body);
+  const allowedUpdates = ['title', 'description', 'status', 'budget', 'location', 'category', 'priority'];
+  const isValidOperation = updates.every((update) => allowedUpdates.includes(update));
+
+  if (!isValidOperation) {
+    return res.status(400).json({ error: 'Invalid updates!' });
+  }
+
+  try {
+    const task = await Task.findOne({ _id: req.params.id, client: req.user._id });
+
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    updates.forEach((update) => task[update] = req.body[update]);
+    await task.save();
+    res.json(task);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+// Delete a task
+router.delete('/tasks/:id', auth, async (req, res) => {
+  try {
+    const task = await Task.findOneAndDelete({ _id: req.params.id, client: req.user._id });
+
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    res.json(task);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
 export default router;

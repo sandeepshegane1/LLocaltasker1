@@ -25,6 +25,9 @@ const userSchema = new mongoose.Schema({
   skills: [{
     type: String
   }],
+  crops: [{
+    type: String
+  }],
   location: {
     type: {
       type: String,
@@ -61,3 +64,4 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 const User = mongoose.model('User', userSchema);
 
 export default User;
+

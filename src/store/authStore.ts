@@ -1,11 +1,20 @@
 import { create } from 'zustand';
 import api from '../lib/axios';
 
+interface Location {
+  type: string;
+  coordinates: [number, number];
+}
+
 interface User {
-  id: string;
-  name: string;
+  _id: string;
   email: string;
+  name: string;
   role: 'CLIENT' | 'PROVIDER';
+  skills: string[];
+  location: Location;
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface AuthState {
@@ -13,8 +22,9 @@ interface AuthState {
   token: string | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (userData: any) => Promise<void>;
+  register: (userData: Partial<User>) => Promise<void>;
   logout: () => void;
+  updateUser: (userData: Partial<User>) => void;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -42,14 +52,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const formattedUserData = {
         ...userData,
-        location: userData.location && 
-                  typeof userData.location.latitude === 'number' && 
-                  typeof userData.location.longitude === 'number'
-          ? {
-              latitude: userData.location.latitude,
-              longitude: userData.location.longitude
-            }
-          : undefined
+        location: userData.location || {
+          type: 'Point',
+          coordinates: [0, 0]
+        },
+        skills: userData.skills || []
       };
       
       console.log("Sending registration data:", formattedUserData);
@@ -78,5 +85,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     localStorage.removeItem('token');
     set({ user: null, token: null, isAuthenticated: false });
   },
+
+  updateUser: (userData) => {
+    set((state) => ({
+      user: state.user ? { ...state.user, ...userData } : null
+    }));
+  }
 }));
 

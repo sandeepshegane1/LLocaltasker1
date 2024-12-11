@@ -8,6 +8,7 @@ import { Login } from './pages/Login';
 import { Register } from './pages/Register';
 import { PrivateRoute } from './components/PrivateRoute';
 import { Navbar } from './components/Navbar';
+import { UserProfile } from './components/profile/UserProfile';
 
 const queryClient = new QueryClient();
 
@@ -21,6 +22,8 @@ export function App() {
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/profile" element={<UserProfile />} />
+
             <Route
               path="/dashboard/*"
               element={

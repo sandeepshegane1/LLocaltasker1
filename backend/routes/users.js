@@ -36,6 +36,8 @@ router.patch('/profile', auth, async (req, res) => {
 
 // Get service providers by category
 router.get('/providers', auth, async (req, res) => {
+  console.log('Request received for /providers with query:', req.query);
+
   try {
     const { category, lat, lng } = req.query;
     
@@ -81,8 +83,61 @@ router.get('/providers', auth, async (req, res) => {
   }
 });
 
+
+router.get('/farmers', auth, async (req, res) => {
+  try {
+    console.log('Request received for /farmers with query:', req.query);
+
+    const { category, lat, lng } = req.query;
+
+    // Validate category
+    if (!category) {
+      console.log('Validation failed: Category is missing.');
+      return res.status(400).json({ error: 'Category is required' });
+    }
+
+    console.log(`Filtering farmers by category: ${category.toUpperCase()}`);
+
+    const query = {
+      role: 'PROVIDER',
+      skills: { 
+        $in: [category.toUpperCase()] 
+      }
+    };
+
+    // Optional location-based filtering
+    if (lat && lng) {
+      console.log(`Applying location filter with coordinates: [${lng}, ${lat}]`);
+      query.location = {
+        $near: {
+          $geometry: {
+            type: 'Point',
+            coordinates: [parseFloat(lng), parseFloat(lat)]
+          },
+          $maxDistance: 100000 // 100km radius
+        }
+      };
+    }
+
+    console.log('Query to be executed on the database:', query);
+
+    const farmers = await User.find(query)
+      .select('-password')
+      .limit(20);
+
+    console.log(`Found ${farmers.length} farmers matching the criteria.`);
+    res.json(farmers);
+  } catch (error) {
+    console.error('Error occurred in /farmers route:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
 // Get workers by category (similar to providers)
 router.get('/workers', auth, async (req, res) => {
+  console.log('Request received for /workers with query:', req.query);
+
   try {
     const { category, lat, lng } = req.query;
 

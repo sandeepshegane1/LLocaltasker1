@@ -53,15 +53,9 @@ router.post('/register', async (req, res) => {
       expiresIn: '7d' // Token validity period
     });
 
-    // Return only essential user details and the token
-    const userResponse = {
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      skills: user.skills,
-      location: user.location
-    };
+    // Return all user details (except password) and the token
+    const userResponse = user.toObject();
+    delete userResponse.password;
 
     res.status(201).json({ user: userResponse, token });
   } catch (error) {
@@ -70,10 +64,7 @@ router.post('/register', async (req, res) => {
   }
 });
 
-
-
-
-
+// Login route
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -83,19 +74,20 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Invalid login credentials' });
     }
     
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET);
+    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET, {
+      expiresIn: '7d' // Token validity period
+    });
     
-    const userResponse = {
-      _id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role
-    };
+    // Return all user details (except password) and the token
+    const userResponse = user.toObject();
+    delete userResponse.password;
 
     res.json({ user: userResponse, token });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'An error occurred during login' });
   }
 });
+
 
 export default router;
