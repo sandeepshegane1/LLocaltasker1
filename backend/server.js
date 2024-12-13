@@ -8,7 +8,7 @@ import reviewRoutes from './routes/reviews.js';
 import bookingRoutes from './routes/bookings.js';
 import taskRoutes from './routes/tasks.js';
 import bodyParser from 'body-parser';
-
+import farmerRoutes from './routes/farmerRoutes.js'
 dotenv.config();
 
 const app = express();
@@ -31,6 +31,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/tasks', taskRoutes);
+app.use('/api/farmers', farmerRoutes);
 
 const PORT = process.env.PORT || 5000;
 

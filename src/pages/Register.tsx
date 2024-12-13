@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { ClientRegistration } from '../components/registration/ClientRegistration';
 import { ProviderRegistration } from '../components/registration/ProviderRegistration';
+import FarmerRegistration from '../components/registration/FarmerRegistration';
 
 export function Register() {
-  const [selectedRole, setSelectedRole] = useState<string | null>(null);
+  const [selectedRole, setSelectedRole] = useState<'CLIENT' | 'PROVIDER' | 'FARMER' | null>(null);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -28,13 +29,21 @@ export function Register() {
             >
               Register as Service Provider
             </button>
+            <button
+              onClick={() => setSelectedRole('FARMER')}
+              className="w-full flex justify-center py-3 px-4 border-2 border-emerald-600 rounded-md shadow-sm text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500"
+            >
+              Register as Farmer
+            </button>
           </div>
         ) : (
           <>
             {selectedRole === 'CLIENT' ? (
               <ClientRegistration />
-            ) : (
+            ) : selectedRole === 'PROVIDER' ? (
               <ProviderRegistration />
+            ) : (
+              <FarmerRegistration />
             )}
             <button
               onClick={() => setSelectedRole(null)}
@@ -48,3 +57,4 @@ export function Register() {
     </div>
   );
 }
+
