@@ -67,10 +67,11 @@ interface AuthState {
   farmerregister: (userData: Farmers) => Promise<void>;
   logout: () => void;
   updateUser: (userData: Partial<Farmers>) => Promise<void>;
+  loadUser: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
-  user: null,
+  user: JSON.parse(localStorage.getItem('user') || 'null'),
   token: localStorage.getItem('token'),
   isAuthenticated: !!localStorage.getItem('token'),
 
@@ -78,6 +79,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const response = await api.post('/auth/login', { email, password });
       localStorage.setItem('token', response.data.token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
       set({
         user: response.data.user,
         token: response.data.token,
@@ -86,6 +88,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch (error) {
       console.error('Login error:', error);
       localStorage.removeItem('token');
+      localStorage.removeItem('user');
       set({ user: null, token: null, isAuthenticated: false });
       throw error;
     }
@@ -95,6 +98,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const response = await api.post('/auth/register', userData);
       localStorage.setItem('token', response.data.token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
       set({
         user: response.data.user,
         token: response.data.token,
@@ -117,6 +121,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
 
       localStorage.setItem('token', response.data.token);
+      localStorage.setItem('user', JSON.stringify(response.data.user));
       set({
         user: response.data.user,
         token: response.data.token,
@@ -125,6 +130,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch (error: any) {
       console.error('Farmer registration error:', error.response?.data || error.message);
       localStorage.removeItem('token');
+      localStorage.removeItem('user');
       set({ user: null, token: null, isAuthenticated: false });
       throw error;
     }
@@ -132,19 +138,45 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   logout: () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('user');
     set({ user: null, token: null, isAuthenticated: false });
   },
 
   updateUser: async (userData: Partial<Farmers>) => {
     try {
       const response = await api.put('/auth/update', userData);
-      set({ user: response.data.user });
+      const updatedUser = response.data.user;
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      set({ user: updatedUser });
     } catch (error) {
       console.error('User update error:', error);
       throw error;
     }
   },
+
+  loadUser: async () => {
+    const token = localStorage.getItem('token');
+    const userStr = localStorage.getItem('user');
+
+    if (!token || !userStr) {
+      set({ user: null, token: null, isAuthenticated: false });
+      return;
+    }
+
+    try {
+      const user = JSON.parse(userStr);
+      set({
+        user,
+        token,
+        isAuthenticated: true
+      });
+    } catch (error) {
+      console.error('Error parsing stored user data:', error);
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      set({ user: null, token: null, isAuthenticated: false });
+    }
+  },
 }));
 
 export default useAuthStore;
-
