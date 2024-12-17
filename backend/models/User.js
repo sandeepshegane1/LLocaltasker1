@@ -25,9 +25,6 @@ const userSchema = new mongoose.Schema({
   skills: [{
     type: String
   }],
-  crops: [{
-    type: String
-  }],
   location: {
     type: {
       type: String,
@@ -50,16 +47,6 @@ const userSchema = new mongoose.Schema({
 });
 
 userSchema.index({ location: '2dsphere' });
-
-userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
-  this.password = await bcrypt.hash(this.password, 10);
-  next();
-});
-
-userSchema.methods.comparePassword = async function(candidatePassword) {
-  return bcrypt.compare(candidatePassword, this.password);
-};
 
 const User = mongoose.model('User', userSchema);
 
