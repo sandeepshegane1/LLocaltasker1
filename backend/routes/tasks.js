@@ -63,6 +63,7 @@ router.get('/provider', auth, async (req, res) => {
     });
   }
 });
+
 // Get tasks for client
 router.get('/client', auth, async (req, res) => {
   try {
@@ -105,6 +106,7 @@ router.patch('/:id', auth, async (req, res) => {
     res.status(400).json({ error: error.message });
   }
 });
+
 router.delete('/:id', auth, async (req, res) => {
   try {
     const task = await Task.findOne({
@@ -123,19 +125,43 @@ router.delete('/:id', auth, async (req, res) => {
   }
 });
 
-// In your taskRoutes.js or equivalent file
-
+// Get user tasks - specific route should come before parameterized routes
 router.get('/user-tasks', auth, async (req, res) => {
   try {
+    console.log('Fetching tasks for user:', req.user._id);
+
     const tasks = await Task.find({
       client: req.user._id,
       $or: [
         { status: { $ne: 'CANCELLED' } },
         { status: 'CANCELLED', rejectedByProvider: true }
       ]
-    }).sort({ createdAt: -1 });
-    res.json(tasks);
+    })
+    .populate({
+      path: 'provider',
+      select: '_id name',
+      match: { _id: { $exists: true } }
+    })
+    .select('title description status category provider createdAt rejectedByProvider')
+    .lean()
+    .sort({ createdAt: -1 });
+    
+    const transformedTasks = tasks.map(task => ({
+      ...task,
+      provider: task.provider || null,
+      category: task.category || 'General'
+    }));
+
+    console.log('Found tasks:', transformedTasks.map(t => ({
+      id: t._id,
+      provider: t.provider,
+      category: t.category,
+      status: t.status
+    })));
+
+    res.json(transformedTasks);
   } catch (error) {
+    console.error('Error fetching user tasks:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -182,6 +208,43 @@ router.get('/tasks', auth, async (req, res) => {
   }
 });
 
+// Get a single task by ID - this should come after specific routes
+router.get('/:id', auth, async (req, res) => {
+  try {
+    console.log('Fetching task with ID:', req.params.id);
+    console.log('User ID:', req.user._id);
+
+    // Validate task ID format
+    if (!req.params.id.match(/^[0-9a-fA-F]{24}$/)) {
+      return res.status(400).json({ error: 'Invalid task ID format' });
+    }
+
+    const task = await Task.findById(req.params.id)
+      .populate('provider', '_id name')
+      .select('title description status category provider client createdAt rejectedByProvider')
+      .lean();
+
+    console.log('Found task:', task);
+
+    if (!task) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    // Transform task to ensure all required fields are present
+    const transformedTask = {
+      ...task,
+      provider: task.provider || null,
+      category: task.category || 'General'
+    };
+
+    console.log('Sending transformed task:', transformedTask);
+    res.json(transformedTask);
+  } catch (error) {
+    console.error('Error fetching task:', error);
+    res.status(500).json({ error: 'Failed to fetch task details' });
+  }
+});
+
 // Update a task
 router.patch('/tasks/:id', auth, async (req, res) => {
   const updates = Object.keys(req.body);
@@ -222,5 +285,41 @@ router.delete('/tasks/:id', auth, async (req, res) => {
   }
 });
 
+// Get completed tasks count for provider
+router.get('/provider/:providerId/completed', auth, async (req, res) => {
+  try {
+    const count = await Task.countDocuments({
+      provider: req.params.providerId,
+      status: 'COMPLETED'
+    });
+    res.json({ count });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get completed tasks count for a provider
+router.get('/provider/:providerId/completed-count', async (req, res) => {
+  try {
+    const providerId = req.params.providerId;
+    const { category } = req.query;
+
+    const query = {
+      provider: providerId,
+      status: 'COMPLETED'
+    };
+
+    // Add category filter if provided
+    if (category) {
+      query.category = category;
+    }
+
+    const count = await Task.countDocuments(query);
+    res.json({ count });
+  } catch (error) {
+    console.error('Error getting completed tasks count:', error);
+    res.status(500).json({ error: 'Failed to get completed tasks count' });
+  }
+});
 
 export default router;

@@ -7,6 +7,11 @@ const api = axios.create({
   timeout: 10000, // 10 second timeout
 });
 
+// Keep track of displayed error messages to prevent duplicates
+let lastErrorMessage = '';
+let lastErrorTime = 0;
+const ERROR_COOLDOWN = 2000; // 2 seconds cooldown between same error messages
+
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) {
@@ -27,8 +32,15 @@ api.interceptors.response.use(
       // No response received
       errorMessage = 'Unable to connect to server. Please check your connection.';
     }
+
+    // Prevent duplicate error messages in quick succession
+    const now = Date.now();
+    if (errorMessage !== lastErrorMessage || now - lastErrorTime > ERROR_COOLDOWN) {
+      lastErrorMessage = errorMessage;
+      lastErrorTime = now;
+     // toast.error(errorMessage);
+    }
     
-    toast.error(errorMessage);
     throw error;
   }
 );

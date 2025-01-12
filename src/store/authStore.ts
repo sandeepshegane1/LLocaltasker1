@@ -3,70 +3,29 @@ import api from '../lib/axios';
 
 export interface Location {
   type: string;
-  coordinates: [number, number];
+  coordinates: [number, number];  // [longitude, latitude]
 }
 
-export interface Farmers {
-  professionalProfile: {
-    name: {
-      firstName: string;
-      lastName?: string;
-    };
-    contactDetails: {
-      phone: {
-        primary: string;
-      };
-      email: string;
-    };
-  };
-  serviceExpertise: {
-    primarySpecialization: string;
-    supportedCropTypes: string[];
-  };
-  services: Array<{
-    serviceName: string;
-    description: string;
-    pricingModel: {
-      basePrice: number;
-      priceUnit: string;
-    };
-    serviceArea: {
-      radius?: number;
-      districts: string[];
-      states: string[];
-    };
-    availability: {
-      daysAvailable: string[];
-      seasonalAvailability: {
-        startMonth: string;
-        endMonth: string;
-      };
-    };
-  }>;
-  resources: {
-    machineryOwned: Array<{
-      type: string;
-      model: string;
-      manufacturingYear: number;
-      condition: string;
-    }>;
-    additionalEquipment: string[];
-  };
-  businessCredentials: {
-    registrationType: string;
-    businessRegistrationNumber: string;
-  };
+export interface User {
+  _id?: string;
+  name: string;
+  email: string;
+  role: 'USER' | 'PROVIDER' | 'FARMER';
+  skills: string[];
+  location: Location;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface AuthState {
-  user: Farmers | null;
+  user: User | null;
   token: string | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (userData: Partial<Farmers> & { password: string }) => Promise<void>;
-  farmerregister: (userData: Farmers) => Promise<void>;
+  register: (userData: Partial<User> & { password: string }) => Promise<void>;
+  farmerregister: (userData: User) => Promise<void>;
   logout: () => void;
-  updateUser: (userData: Partial<Farmers>) => Promise<void>;
+  updateUser: (userData: Partial<User>) => Promise<void>;
   loadUser: () => Promise<void>;
 }
 
@@ -94,7 +53,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  register: async (userData: Partial<Farmers> & { password: string }) => {
+  register: async (userData: Partial<User> & { password: string }) => {
     try {
       const response = await api.post('/auth/register', userData);
       localStorage.setItem('token', response.data.token);
@@ -110,7 +69,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  farmerregister: async (userData: Farmers) => {
+  farmerregister: async (userData: User) => {
     try {
       console.log('Sending farmer registration data:', userData);
 
@@ -142,12 +101,32 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user: null, token: null, isAuthenticated: false });
   },
 
-  updateUser: async (userData: Partial<Farmers>) => {
+  updateUser: async (userData: Partial<User>) => {
     try {
-      const response = await api.put('/auth/update', userData);
-      const updatedUser = response.data.user;
+      // Ensure location data is properly formatted
+      let locationData = userData.location;
+      if (locationData) {
+        locationData = {
+          type: 'Point',
+          coordinates: Array.isArray(locationData.coordinates) 
+            ? [Number(locationData.coordinates[0]), Number(locationData.coordinates[1])]
+            : [0, 0]
+        };
+      }
+
+      console.log('Sending update data:', { ...userData, location: locationData });
+
+      const response = await api.patch(`/users/profile`, {
+        ...userData,
+        location: locationData
+      });
+
+      const updatedUser = response.data;
+      console.log('Received updated user:', updatedUser);
+      
       localStorage.setItem('user', JSON.stringify(updatedUser));
       set({ user: updatedUser });
+      return updatedUser;
     } catch (error) {
       console.error('User update error:', error);
       throw error;

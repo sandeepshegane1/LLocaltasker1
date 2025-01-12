@@ -28,17 +28,21 @@ const userSchema = new mongoose.Schema({
   location: {
     type: {
       type: String,
+      enum: ['Point'],
       default: 'Point',
-      enum: ['Point']
+      required: true
     },
     coordinates: {
       type: [Number],
       required: true,
       validate: {
         validator: function(v) {
-          return v.length === 2;
+          return Array.isArray(v) && 
+                 v.length === 2 && 
+                 v[0] >= -180 && v[0] <= 180 && // longitude
+                 v[1] >= -90 && v[1] <= 90;      // latitude
         },
-        message: 'Coordinates must be an array of [longitude, latitude]'
+        message: props => `${props.value} is not a valid [longitude, latitude] coordinate pair!`
       }
     }
   },

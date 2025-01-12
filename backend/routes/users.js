@@ -17,6 +17,7 @@ router.get('/profile', auth, async (req, res) => {
 
 // Update user profile
 router.patch('/profile', auth, async (req, res) => {
+  console.log('Updating user profile:', req.body);
   const updates = Object.keys(req.body);
   const allowedUpdates = ['name', 'email', 'location', 'skills'];
   const isValidOperation = updates.every(update => allowedUpdates.includes(update));
@@ -171,5 +172,22 @@ router.get('/workers', auth, async (req, res) => {
   }
 });
 
+// Get user's reviews
+router.get('/:userId/reviews', async (req, res) => {
+  try {
+    const reviews = await Review.find({ user: req.params.userId })
+      .populate({
+        path: 'task',
+        populate: {
+          path: 'provider',
+          select: 'name email'
+        }
+      })
+      .sort({ createdAt: -1 });
+    res.json(reviews);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
 
 export default router;

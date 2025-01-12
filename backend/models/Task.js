@@ -21,6 +21,11 @@ const taskSchema = new mongoose.Schema({
     required: true,
     min: [0, 'Budget must be a positive number']
   },
+  category: {
+    type: String,
+    required: true,
+    trim: true
+  },
   location: {
     type: {
       type: String,
@@ -45,8 +50,7 @@ const taskSchema = new mongoose.Schema({
   },
   provider: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true
+    ref: 'User'
   },
   priority: {
     type: String,

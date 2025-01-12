@@ -1,17 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { Star, MapPin, Calendar, Info, Crosshair } from 'lucide-react';
 import api from '../../lib/axios';
 import { useAuthStore } from '../../store/authStore';
 import { calculateDistance } from '../../utils/distance';
+import { ProviderReviews } from './ProviderReviews';
+import { ProviderStats } from './ProviderStats';
 
-// Interfaces (unchanged)
+// Interfaces (updated)
 interface User {
   _id: string;
   name: string;
   email: string;
   role: 'CLIENT' | 'PROVIDER';
+}
+
+interface ProviderStats {
+  averageRating: number;
+  totalReviews: number;
+  ratingDistribution: {
+    [key: number]: number;
+  };
 }
 
 interface ServiceProvider extends User {
@@ -23,6 +33,8 @@ interface ServiceProvider extends User {
     type: string;
     coordinates: number[];
   };
+  stats?: ProviderStats;
+  reviewsCount?: number;
 }
 
 interface Task {
@@ -107,6 +119,92 @@ const FormInput = ({
   </div>
 );
 
+// Provider Card Component (new)
+function ProviderCard({ provider, onSelect }: { provider: ServiceProvider; onSelect: () => void }) {
+  const { category } = useParams<{ category: string }>();
+  const { data: stats } = useQuery({
+    queryKey: ['provider-stats', provider._id, category],
+    queryFn: async () => {
+      const response = await api.get(`/reviews/provider/${provider._id}/stats?category=${category}`);
+      return response.data;
+    },
+  });
+
+  const { data: tasksData } = useQuery({
+    queryKey: ['provider-tasks', provider._id],
+    queryFn: async () => {
+      const response = await api.get(`/tasks/provider/${provider._id}/completed`);
+      return response.data;
+    },
+  });
+
+  return (
+    <div className="bg-white rounded-lg shadow-sm p-6 flex flex-col">
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex items-center">
+          <ProviderAvatar name={provider.name} />
+          <div className="ml-4">
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-gray-900">{provider.name}</h3>
+              <ProviderStats providerId={provider._id} category={category} />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {provider.skills && provider.skills.length > 0 && (
+        <div className="mb-4">
+          <h4 className="text-sm font-medium text-gray-700 mb-2">Skills</h4>
+          <div className="flex flex-wrap gap-2">
+            {provider.skills.map((skill) => (
+              <span
+                key={skill}
+                className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full"
+              >
+                {skill}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="mt-auto">
+        <button
+          onClick={onSelect}
+          className="w-full px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors"
+        >
+          Select Provider
+        </button>
+      </div>
+
+      {/* Reviews Section */}
+      <div className="border-t pt-4 mt-6">
+        <div className="flex items-center justify-between mb-4">
+          <h4 className="font-medium">Reviews</h4>
+          <button
+            onClick={() => setShowReviews(prev => ({
+              ...prev,
+              [provider._id]: !prev[provider._id]
+            }))}
+            className="text-sm text-emerald-600 hover:text-emerald-700 transition-colors"
+          >
+            {showReviews[provider._id] ? 'Hide Reviews' : 'Show Reviews'}
+          </button>
+        </div>
+        {showReviews[provider._id] && (
+          <div className="mt-4">
+            <ProviderReviews 
+              providerId={provider._id} 
+              serviceCategory={category || ''}
+              hideStats={true}
+            />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function ServiceProviders() {
   const { category } = useParams<{ category: string }>();
   const [taskFormData, setTaskFormData] = useState<TaskFormData>({
@@ -114,7 +212,7 @@ export function ServiceProviders() {
     description: '',
     budget: 0,
     deadline: '',
-    priority: 'MEDIUM',
+    priority: 'LOW',
     location: {
       latitude: null,
       longitude: null
@@ -124,6 +222,7 @@ export function ServiceProviders() {
   const [isGettingLocation, setIsGettingLocation] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
   const [clientLocation, setClientLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [showReviews, setShowReviews] = useState<{ [key: string]: boolean }>({});
 
   // Authentication and data fetching logic (unchanged)
   const { user: clientUser, isAuthenticated } = useAuthStore((state) => ({
@@ -135,7 +234,31 @@ export function ServiceProviders() {
     queryKey: ['providers', category],
     queryFn: async () => {
       const response = await api.get(`/users/providers?category=${category?.toUpperCase()}`);
-      return response.data;
+      const providers = response.data;
+
+      // Fetch stats for each provider
+      const providersWithStats = await Promise.all(
+        providers.map(async (provider) => {
+          try {
+            const [statsResponse, tasksResponse] = await Promise.all([
+              api.get(`/reviews/provider/${provider._id}/stats?category=${category}`),
+              api.get(`/tasks/provider/${provider._id}/completed`)
+            ]);
+            
+            return {
+              ...provider,
+              rating: statsResponse.data.averageRating || 0,
+              reviewsCount: statsResponse.data.totalReviews || 0,
+              completedTasks: tasksResponse.data.count || 0
+            };
+          } catch (error) {
+            console.error('Error fetching provider stats:', error);
+            return provider;
+          }
+        })
+      );
+
+      return providersWithStats;
     },
     enabled: isAuthenticated && !!clientUser?._id
   });
@@ -231,7 +354,7 @@ export function ServiceProviders() {
         location: {
           type: 'Point',
           coordinates: [
-            taskFormData.location.longitude!, 
+            taskFormData.location.longitude!,  // GeoJSON format: [longitude, latitude]
             taskFormData.location.latitude!
           ]
         },
@@ -249,7 +372,7 @@ export function ServiceProviders() {
       description: '',
       budget: 0,
       deadline: '',
-      priority: 'MEDIUM',
+      priority: 'LOW',
       location: {
         latitude: null,
         longitude: null
@@ -267,6 +390,23 @@ export function ServiceProviders() {
         return { ...prev, [name]: parseFloat(value) || 0 };
       }
       return { ...prev, [name]: value };
+    });
+  };
+
+  // Format currency
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-IN', {
+      style: 'currency',
+      currency: 'INR'
+    }).format(amount);
+  };
+
+  // Format date
+  const formatDate = (date: string) => {
+    return new Date(date).toLocaleDateString('en-IN', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
     });
   };
 
@@ -296,85 +436,62 @@ export function ServiceProviders() {
         {providers?.map((provider) => (
           <div 
             key={provider._id}
-            className="w-full bg-white rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300"
+            className="bg-white rounded-lg shadow-lg p-6 space-y-4"
           >
-            <div className="flex flex-col md:flex-row p-6">
-              {/* Left Column: Provider Info (unchanged) */}
-              <div className="md:w-1/3 mb-4 md:mb-0 md:mr-6">
-                <div className="flex items-center mb-4">
-                  <ProviderAvatar name={provider.name} />
-                  <div className="ml-4">
-                    <h3 className="text-xl font-semibold text-emerald-900">{provider.name}</h3>
-                    <div className="flex items-center text-sm text-gray-600">
-                      <Star className="w-4 h-4 text-yellow-400 fill-current mr-1" />
-                      <span>
-                        {provider.rating?.toFixed(1) || '4.8'} 
-                        <span className="ml-1">
-                          ({provider.completedTasks || 24} tasks)
-                        </span>
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Provider Details */}
-                <div className="space-y-3 text-gray-700">
-                  <div className="flex items-center">
-                    <MapPin className="w-5 h-5 mr-3 text-emerald-500" />
-                    <span>
-                      {provider.location?.coordinates && clientLocation
-                        ? `${calculateDistance(
-                            clientLocation.latitude,
-                            clientLocation.longitude,
-                            provider.location.coordinates[1],
-                            provider.location.coordinates[0]
-                          )} km away`
-                        : 'Distance not available'}
-                    </span>
-                  </div>
-                  <div className="flex items-center">
-                    <Calendar className="w-5 h-5 mr-3 text-emerald-500" />
-                    <span>Available Mon-Fri, 9AM-5PM</span>
-                  </div>
-                </div>
-
-                {/* Skills */}
-                <div className="mt-4">
-                  <h4 className="font-medium mb-3 text-emerald-800">Skills</h4>
-                  <div className="flex flex-wrap gap-2">
-                    {provider.skills?.map((skill) => (
-                      <span
-                        key={skill}
-                        className="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-xs"
-                      >
-                        {skill.replace('_', ' ')}
-                      </span>
-                    ))}
+            <div className="flex items-start justify-between">
+              <div className="flex items-center space-x-4">
+                <ProviderAvatar name={provider.name} />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-semibold">{provider.name}</h3>
+                    <ProviderStats providerId={provider._id} category={category} />
                   </div>
                 </div>
               </div>
+              {/* Right Column: Provider Info */}
+              <div className="flex items-center space-x-2 text-sm text-gray-600">
+                <MapPin className="w-5 h-5 mr-2 text-emerald-500" />
+                <span>
+                  {provider.location?.coordinates && clientLocation
+                    ? `${calculateDistance(
+                        clientLocation.latitude,
+                        clientLocation.longitude,
+                        provider.location.coordinates[1],
+                        provider.location.coordinates[0]
+                      )} km away`
+                    : 'Distance not available'}
+                </span>
+              </div>
+            </div>
+            
+            {/* Task Form Section */}
+            <div className="border-t pt-6">
+              <form 
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSubmitTask(provider);
+                }} 
+                className="space-y-4"
+              >
+                {/* Task Title and Description */}
+                <div className="grid grid-cols-1 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Task Title</label>
+                    <input
+                      type="text"
+                      name="title"
+                      value={taskFormData.title}
+                      onChange={handleInputChange}
+                      className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-emerald-500 ${
+                        formErrors.title ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder="Enter task title"
+                    />
+                    {formErrors.title && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.title}</p>
+                    )}
+                  </div>
 
-              {/* Right Column: Task Creation Form (updated) */}
-              <div className="md:w-2/3 border-t md:border-t-0 md:border-l border-gray-200 md:pl-6 pt-6 md:pt-0">
-                <form 
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    handleSubmitTask(provider);
-                  }} 
-                  className="space-y-4"
-                >
-                  {/* Task Title */}
-                  <FormInput 
-                    label="Task Title"
-                    type="text"
-                    name="title"
-                    value={taskFormData.title}
-                    onChange={handleInputChange}
-                    placeholder="Enter task title"
-                    error={formErrors.title}
-                  />
-
-                  {/* Description */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                     <textarea
@@ -391,57 +508,76 @@ export function ServiceProviders() {
                       <p className="text-red-500 text-xs mt-1">{formErrors.description}</p>
                     )}
                   </div>
+                </div>
 
-                  {/* Budget and Deadline */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <FormInput 
-                      label="Budget"
+                {/* Budget and Deadline */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Budget
+                      <span className="text-xs text-gray-500 ml-1">(INR)</span>
+                    </label>
+                    <input
                       type="number"
                       name="budget"
                       value={taskFormData.budget}
                       onChange={handleInputChange}
-                      placeholder="$0.00"
-                      error={formErrors.budget}
+                      className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-emerald-500 ${
+                        formErrors.budget ? 'border-red-500' : 'border-gray-300'
+                      }`}
+                      placeholder="₹0.00"
+                      step="100"
+                      min="0"
                     />
-                    
-                    <FormInput 
-                      label="Deadline"
+                    {formErrors.budget && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.budget}</p>
+                    )}
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Deadline
+                      <span className="text-xs text-gray-500 ml-1">(Select date)</span>
+                    </label>
+                    <input
                       type="date"
                       name="deadline"
                       value={taskFormData.deadline}
                       onChange={handleInputChange}
-                      error={formErrors.deadline}
+                      min={new Date().toISOString().split('T')[0]}
+                      className={`w-full px-3 py-2 border rounded-md focus:ring-2 focus:ring-emerald-500 ${
+                        formErrors.deadline ? 'border-red-500' : 'border-gray-300'
+                      }`}
                     />
+                    {formErrors.deadline && (
+                      <p className="text-red-500 text-xs mt-1">{formErrors.deadline}</p>
+                    )}
                   </div>
+                </div>
 
-                  {/* Location */}
+                {/* Location and Priority */}
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
-                    <div className="flex items-center space-x-2">
-                      <button
-                        type="button"
-                        onClick={getCurrentLocation}
-                        disabled={isGettingLocation}
-                        className="flex items-center justify-center px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <Crosshair className="w-5 h-5 mr-2" />
-                        {isGettingLocation ? 'Getting Location...' : 'Get Current Location'}
-                      </button>
-                      {taskFormData.location.latitude !== null && taskFormData.location.longitude !== null && (
-                        <span className="text-sm text-gray-600">
-                          Location set: {taskFormData.location.latitude.toFixed(4)}, {taskFormData.location.longitude.toFixed(4)}
-                        </span>
-                      )}
-                    </div>
+                    <button
+                      type="button"
+                      onClick={getCurrentLocation}
+                      disabled={isGettingLocation}
+                      className="flex items-center justify-center w-full px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Crosshair className="w-5 h-5 mr-2" />
+                      {isGettingLocation ? 'Getting Location...' : 'Get Current Location'}
+                    </button>
                     {locationError && (
                       <p className="text-red-500 text-xs mt-1">{locationError}</p>
                     )}
-                    {formErrors.location && (
-                      <p className="text-red-500 text-xs mt-1">{formErrors.location}</p>
+                    {taskFormData.location.latitude !== null && taskFormData.location.longitude !== null && (
+                      <p className="text-sm text-gray-600 mt-1">
+                        Location set: {taskFormData.location.latitude.toFixed(4)}, {taskFormData.location.longitude.toFixed(4)}
+                      </p>
                     )}
                   </div>
 
-                  {/* Priority Dropdown */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
                     <select
@@ -450,24 +586,48 @@ export function ServiceProviders() {
                       onChange={handleInputChange}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-emerald-500"
                     >
-                      <option value="LOW">Low</option>
-                      <option value="MEDIUM">Medium</option>
-                      <option value="HIGH">High</option>
+                      <option value="LOW">Low Priority</option>
+                      <option value="MEDIUM">Medium Priority</option>
+                      <option value="HIGH">High Priority</option>
                     </select>
                   </div>
+                </div>
 
-                  {/* Submit Button */}
-                  <button
-                    type="submit"
-                    disabled={createTaskMutation.isPending}
-                    className="w-full bg-emerald-600 text-white py-3 rounded-md hover:bg-emerald-700 transition-colors 
-                      focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2
-                      disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {createTaskMutation.isPending ? 'Creating Task...' : 'Create Task'}
-                  </button>
-                </form>
+                {/* Submit Button */}
+                <button
+                  type="submit"
+                  disabled={createTaskMutation.isPending}
+                  className="w-full bg-emerald-600 text-white py-3 rounded-md hover:bg-emerald-700 transition-colors 
+                    focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2
+                    disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {createTaskMutation.isPending ? 'Creating Task...' : 'Create Task'}
+                </button>
+              </form>
+            </div>
+
+            {/* Reviews Section */}
+            <div className="border-t pt-4 mt-6">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-medium">Reviews</h4>
+                <button
+                  onClick={() => setShowReviews(prev => ({
+                    ...prev,
+                    [provider._id]: !prev[provider._id]
+                  }))}
+                  className="text-sm text-emerald-600 hover:text-emerald-700 transition-colors"
+                >
+                  {showReviews[provider._id] ? 'Hide Reviews' : 'Show Reviews'}
+                </button>
               </div>
+              {showReviews[provider._id] && (
+                <div className="mt-4">
+                  <ProviderReviews 
+                    providerId={provider._id} 
+                    serviceCategory={category} 
+                  />
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -475,4 +635,3 @@ export function ServiceProviders() {
     </div>
   );
 }
-
